@@ -1,10 +1,7 @@
 package com.myself.jwt_login.config;
 
-import com.myself.jwt_login.security.JwtAuthenticationEntryPoint;
 import com.myself.jwt_login.security.JwtAuthenticationFilter;
-import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -24,35 +21,21 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableMethodSecurity
 public class SecurityConfig {
 
-    private JwtAuthenticationEntryPoint unauthorizedHandler;
-    private JwtAuthenticationFilter jwtAuthenticationFilter;
-
-    // 使用 setter 注入而不是构造器注入
-    @Autowired
-    public void setUnauthorizedHandler(JwtAuthenticationEntryPoint unauthorizedHandler) {
-        this.unauthorizedHandler = unauthorizedHandler;
-    }
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
 
     @Autowired
-    public void setJwtAuthenticationFilter(JwtAuthenticationFilter jwtAuthenticationFilter) {
+    public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
     }
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
-        // 添加空检查，防止 NPE
-        if (unauthorizedHandler == null || jwtAuthenticationFilter == null) {
-            throw new IllegalStateException("依赖注入未完成");
-        }
-
         http
                 .csrf(AbstractHttpConfigurer::disable)
-                .exceptionHandling(handling -> handling
-                        .authenticationEntryPoint(unauthorizedHandler))
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/auth/**", "/public/**", "/error").permitAll() // 硬编码路径
+                        .requestMatchers("/auth/**", "/public/**", "/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

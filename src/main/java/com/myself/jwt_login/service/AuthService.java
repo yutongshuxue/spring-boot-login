@@ -1,13 +1,12 @@
 package com.myself.jwt_login.service;
 
+import com.myself.jwt_login.common.ResultCode;
 import com.myself.jwt_login.dto.LoginRequest;
 import com.myself.jwt_login.dto.RegisterRequest;
+import com.myself.jwt_login.dto.UserInfo;
 import com.myself.jwt_login.entity.Users;
-import com.myself.jwt_login.exception.BusinessException;
-import com.myself.jwt_login.exception.ErrorCode;
 import com.myself.jwt_login.mapper.UserMapper;
 import com.myself.jwt_login.security.JwtTokenProvider;
-import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -18,7 +17,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class AuthService {
 
     private final AuthenticationManager authenticationManager;
@@ -26,39 +24,69 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
 
+    public AuthService(AuthenticationManager authenticationManager,
+                       UserMapper userMapper,
+                       PasswordEncoder passwordEncoder,
+                       JwtTokenProvider tokenProvider) {
+        this.authenticationManager = authenticationManager;
+        this.userMapper = userMapper;
+        this.passwordEncoder = passwordEncoder;
+        this.tokenProvider = tokenProvider;
+    }
+
     @Transactional(readOnly = true)
     public String authenticateUser(LoginRequest loginRequest) {
         try {
             Authentication authentication = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
-                            loginRequest.username(),
-                            loginRequest.password()));
+                            loginRequest.getUsername(),
+                            loginRequest.getPassword()));
 
             SecurityContextHolder.getContext().setAuthentication(authentication);
             return tokenProvider.generateToken(authentication);
         } catch (BadCredentialsException e) {
-            throw new BusinessException(ErrorCode.INVALID_CREDENTIALS);
+            throw ResultCode.INVALID_CREDENTIALS.exception("用户名或密码错误");
         }
     }
 
     @Transactional
     public Long registerUser(RegisterRequest registerRequest) {
-        if (userMapper.existsByUsername(registerRequest.username())) {
-            throw new BusinessException(ErrorCode.USERNAME_ALREADY_EXISTS);
+        if (userMapper.existsByUsername(registerRequest.getUsername())) {
+            throw ResultCode.USER_EXISTS.exception("用户名已被使用");
         }
 
-        if (userMapper.existsByEmail(registerRequest.email())) {
-            throw new BusinessException(ErrorCode.EMAIL_ALREADY_REGISTERED);
+        if (userMapper.existsByEmail(registerRequest.getEmail())) {
+            throw ResultCode.USER_EXISTS.exception("邮箱已被注册");
         }
 
-        Users user = Users.builder()
-                .username(registerRequest.username())
-                .password(passwordEncoder.encode(registerRequest.password()))
-                .email(registerRequest.email())
-                .enabled(true)
-                .build();
+        Users user = new Users();
+        user.setUsername(registerRequest.getUsername());
+        user.setPassword(passwordEncoder.encode(registerRequest.getPassword()));
+        user.setEmail(registerRequest.getEmail());
+        user.setEnabled(true);
 
         userMapper.save(user);
         return user.getId();
+    }
+
+    @Transactional
+    public String refreshToken() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) {
+            throw ResultCode.UNAUTHORIZED.exception("用户未登录");
+        }
+
+        return tokenProvider.generateToken(authentication);
+    }
+
+    public UserInfo getCurrentUserInfo() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null) {
+            throw ResultCode.UNAUTHORIZED.exception("用户未登录");
+        }
+
+        return new UserInfo(authentication.getName(), "user@example.com");
     }
 }

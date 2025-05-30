@@ -1,56 +1,59 @@
 package com.myself.jwt_login.exception;
 
-import com.myself.jwt_login.dto.ApiResponse;
+import com.myself.jwt_login.common.ApiException;
+import com.myself.jwt_login.common.ApiResult;
+import com.myself.jwt_login.common.ResultCode;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import java.nio.file.AccessDeniedException;
 import java.util.HashMap;
 import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Map<String, String>>> handleValidationExceptions(
-            MethodArgumentNotValidException ex) {
-        Map<String, String> errors = new HashMap<>();
-        ex.getBindingResult().getFieldErrors().forEach(error ->
-                errors.put(error.getField(), error.getDefaultMessage()));
-
-        // 创建正确类型的响应
-        ApiResponse<Map<String, String>> response =
-                new ApiResponse<>(false, "验证失败", errors);
-
-        return ResponseEntity.badRequest().body(response);
-    }
-
-    @ExceptionHandler(BusinessException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBusinessException(BusinessException ex) {
-        // 使用错误响应方法
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.error(ex.getErrorCode().getMessage()));
+    @ExceptionHandler(ApiException.class)
+    public ApiResult<Void> handleApiException(ApiException ex) {
+        ResultCode resultCode = ex.getResultCode();
+        return ApiResult.error(resultCode.getCode(), ex.getMessage());
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ApiResponse<Void>> handleBadCredentialsException() {
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                .body(ApiResponse.error(ErrorCode.INVALID_CREDENTIALS.getMessage()));
+    @ResponseStatus(HttpStatus.UNAUTHORIZED)
+    public ApiResult<Void> handleBadCredentialsException(BadCredentialsException ex) {
+        return ApiResult.error(ResultCode.INVALID_CREDENTIALS, ex.getMessage());
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException() {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                .body(ApiResponse.error(ErrorCode.UNAUTHORIZED_ACCESS.getMessage()));
+    @ResponseStatus(HttpStatus.FORBIDDEN)
+    public ApiResult<Void> handleAccessDeniedException(AccessDeniedException ex) {
+        return ApiResult.error(ResultCode.FORBIDDEN, ex.getMessage());
     }
 
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ApiResult<Map<String, String>> handleValidationExceptions(
+            MethodArgumentNotValidException ex) {
+
+        Map<String, String> errors = new HashMap<>();
+        ex.getBindingResult().getAllErrors().forEach(error -> {
+            String fieldName = ((FieldError) error).getField();
+            String errorMessage = error.getDefaultMessage();
+            errors.put(fieldName, errorMessage);
+        });
+
+        return ApiResult.error(ResultCode.BAD_REQUEST.getCode(), "参数验证失败");
+    }
+
+    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleGlobalException(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body(ApiResponse.error("服务器内部错误: " + ex.getMessage()));
+    public ApiResult<Void> handleGlobalException(Exception ex) {
+        return ApiResult.error(ResultCode.INTERNAL_SERVER_ERROR);
     }
 }
